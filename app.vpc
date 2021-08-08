@@ -1,0 +1,79 @@
+//-----------------------------------------------------------------------------
+//	APP.VPC
+//
+//	Project Script
+//-----------------------------------------------------------------------------
+
+$Macro SRCDIR		".."
+$Macro OUTBINDIR	"$SRCDIR\..\game\bin"
+$Macro OUTBINNAME	"exampleapp"
+
+$Include "$SRCDIR\vpc_scripts\source_exe_con_base.vpc"
+
+$Configuration
+{
+	$Compiler
+	{
+		$AdditionalIncludeDirectories	"$BASE;./;../public/mathlib;../public/;./thirdparty;./thirdparty/glfw/include"
+		$TreatWarningsAsErrors			"No (/WX-)"
+		$PreprocessorDefinitions		"$BASE;"
+	}
+
+	$Linker [$WIN32]
+	{
+		$EnableLargeAddresses			"Support Addresses Larger Than 2 Gigabytes (/LARGEADDRESSAWARE)"	
+		$SubSystem						"Windows (/SUBSYSTEM:WINDOWS)"
+		$AdditionalDependencies			"$BASE;comctl32.lib"
+		$EntryPoint						"mainCRTStartup"
+	}
+}
+
+$Project "Example ImGui Source App"
+{
+	$Folder	"Dear ImGui"
+	{
+		$File "thirdparty\imgui\imconfig.h"
+		$File "thirdparty\imgui\imgui.h"
+		$File "thirdparty\imgui\imgui_internal.h"
+		$File "thirdparty\imgui\imstb_rectpack.h"
+		$File "thirdparty\imgui\imstb_textedit.h"
+		$File "thirdparty\imgui\imstb_truetype.h"
+		
+		$File "thirdparty\imgui\imgui.cpp"
+		$File "thirdparty\imgui\imgui_demo.cpp"
+		$File "thirdparty\imgui\imgui_draw.cpp"
+		$File "thirdparty\imgui\imgui_tables.cpp"
+		$File "thirdparty\imgui\imgui_widgets.cpp"
+	}
+	$Folder	"Source Files"
+	{
+		$Folder "External"
+		{
+			$File "..\public\filesystem_helpers.cpp"
+			$File "..\public\filesystem_init.cpp"
+			$File "..\public\tier0\memoverride.cpp"
+		}
+		$File "imgui_impl_source.cpp"
+		$File "imgui_impl_source.h"
+
+		$File "main.cpp"
+		$File "app.cpp"
+		$File "app.h"
+	}
+	
+	$Folder	"Libraries"
+	{
+		$Lib "appframework"
+		$Lib "bitmap"
+		$Lib "mathlib"
+		$Lib "tier0"
+		$Lib "tier1"
+		$Lib "tier2"
+		$Lib "vstdlib"
+		$Lib "vtf"
+		$Lib "$LIBCOMMON/lzma"
+		
+		$Lib "./thirdparty/glfw/glfw3"
+	
+	}
+}
