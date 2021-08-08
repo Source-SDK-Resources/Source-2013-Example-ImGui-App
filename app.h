@@ -7,11 +7,9 @@ class ITexture;
 class CImGuiSourceApp
 {
 public:
-	CImGuiSourceApp();
-
-private:
 	void Init();
 	void Destroy();
+private:
 	void Draw();
 
 	GLFWwindow* m_pWindow;

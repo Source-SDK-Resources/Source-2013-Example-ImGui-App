@@ -67,11 +67,6 @@ static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 }
 
 
-CImGuiSourceApp::CImGuiSourceApp()
-{
-	Init();
-	Destroy();
-}
 
 void CImGuiSourceApp::Init()
 {

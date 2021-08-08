@@ -128,7 +128,10 @@ int CSteamAppLoader::Main()
 {
 	g_pMaterialSystem->ModInit();
 
+	// Starts up the app and runs the main loop
 	CImGuiSourceApp* app = new CImGuiSourceApp;
+	app->Init();
+	app->Destroy();
 	delete app;
 
 	g_pMaterialSystem->ModShutdown();
