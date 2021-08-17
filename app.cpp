@@ -2,6 +2,8 @@
 #include "materialsystem/imaterialproxyfactory.h"
 #include "materialsystem/ITexture.h"
 #include "materialsystem/MaterialSystem_Config.h"
+#include "istudiorender.h"
+#include "tier2/camerautils.h"
 
 // Bring in our non-source things
 #include "memdbgoff.h"
@@ -15,6 +17,52 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
+// Small struct to hold studiomdl info and render for us 
+class IMDLCache;
+extern IMDLCache* g_pMDLCache;
+struct studiomodel_t
+{
+	static studiomodel_t LoadModel(const char* path)
+	{
+		MDLHandle_t mdlHandle = g_pMDLCache->FindMDL(path);
+
+		CStudioHdr* studiohdr = new CStudioHdr(g_pMDLCache->GetStudioHdr(mdlHandle), g_pMDLCache);
+		studiohwdata_t* studiohwdata = g_pMDLCache->GetHardwareData(mdlHandle);
+		if (studiohdr->GetRenderHdr()->version != STUDIO_VERSION)
+		{
+			Error("Bad model version on %s! Expected %d, got %d!\n", path, STUDIO_VERSION, studiohdr->GetRenderHdr()->version);
+			return { 0, 0 };
+		}
+		return { studiohdr, studiohwdata };
+	}
+
+	void Draw(Vector& pos, QAngle& ang)
+	{
+		if (!studiohdr || !studiohwdata)
+			return;
+
+		// Set the info
+		DrawModelInfo_t info;
+		memset(&info, 0, sizeof(info));
+		info.m_pStudioHdr = const_cast<studiohdr_t*>(studiohdr->GetRenderHdr());
+		info.m_pHardwareData = studiohwdata;
+		info.m_Lod = -1;
+
+		// Set the transform
+		matrix3x4_t matrix;
+		AngleMatrix(ang, matrix);
+		MatrixSetColumn(pos, 3, matrix);
+
+		// Draw it
+		g_pStudioRender->DrawModelStaticProp(info, matrix);
+	}
+
+	CStudioHdr* studiohdr;
+	studiohwdata_t* studiohwdata;
+};
+
+
+// Currently blank, but might be worth filling in if you need mat proxies
 class CDummyMaterialProxyFactory : public IMaterialProxyFactory
 {
 public:
@@ -23,7 +71,7 @@ public:
 };
 CDummyMaterialProxyFactory g_DummyMaterialProxyFactory;
 
-
+// glfw and imgui callbacks
 static const char* getClipboardText(void* user_data)
 {
 	return glfwGetClipboardString((GLFWwindow*)user_data);
@@ -84,6 +132,7 @@ void CImGuiSourceApp::Init()
 	HWND hwnd = glfwGetWin32Window(m_pWindow);
 #endif
 
+	// Set up matsys
 	MaterialSystem_Config_t config;
 	config = g_pMaterialSystem->GetCurrentConfigForVideoCard();
 	config.SetFlag(MATSYS_VIDCFG_FLAGS_WINDOWED, true);
@@ -103,6 +152,13 @@ void CImGuiSourceApp::Init()
 	g_pMaterialSystem->GetRenderContext()->BindLocalCubemap(m_pWhiteTexture);
 	g_pMaterialSystem->GetRenderContext()->BindLightmapTexture(m_pWhiteTexture);
 
+	// If we don't do this, all models will render black
+	int samples = g_pStudioRender->GetNumAmbientLightSamples();
+	m_ambientLightColors = new Vector[samples];
+	for (int i = 0; i < samples; i++)
+		m_ambientLightColors[i] = { 1,1,1 };
+	g_pStudioRender->SetAmbientLightColors(m_ambientLightColors);
+	
 	// Init Dear ImGui
 	ImGui::CreateContext();
 	ImGui_ImplSource_Init();
@@ -155,13 +211,16 @@ void CImGuiSourceApp::Init()
 	while (!glfwWindowShouldClose(m_pWindow))
 	{
 		glfwPollEvents();
-		Draw();
+		DrawFrame();
 	}
 }
 
 void CImGuiSourceApp::Destroy()
 {
 	// Clean up all of our assets, windows, etc
+	if(m_ambientLightColors)
+		delete[] m_ambientLightColors;
+
 	if (m_pWhiteTexture)
 		m_pWhiteTexture->DecrementReferenceCount();
 
@@ -170,9 +229,12 @@ void CImGuiSourceApp::Destroy()
 	glfwTerminate();
 }
 
+// Current model in use
+static char s_modelName[256] = "models/props_wasteland/laundry_cart002.mdl";
 
-void CImGuiSourceApp::Draw()
+void CImGuiSourceApp::DrawFrame()
 {
+	// What's our delta time?
 	float curTime = glfwGetTime();
 	float dt = curTime - m_lastFrameTime;
 	m_lastFrameTime = curTime;
@@ -180,27 +242,75 @@ void CImGuiSourceApp::Draw()
 	// Start Frame
 	g_pMaterialSystem->BeginFrame(0);
 
-	CMatRenderContextPtr pRenderContext(g_pMaterialSystem);
-	pRenderContext->ClearColor3ub(0x30, 0x30, 0x30);
-	pRenderContext->ClearBuffers(true, true);
+	// Clear out the old frame
+	CMatRenderContextPtr ctx(g_pMaterialSystem);
+	ctx->ClearColor3ub(0x30, 0x30, 0x30);
+	ctx->ClearBuffers(true, true);
 
-	// Let it know our size
+	// Let it know our window size
 	int w, h;
 	glfwGetWindowSize(m_pWindow, &w, &h);
-	pRenderContext->Viewport(0, 0, w, h);
+	ctx->Viewport(0, 0, w, h);
 
 	// Begin ImGui
+	// Ideally this happens before we branch off into other functions, as it needs to be setup for other sections of code to use imgui
 	ImGuiIO& io = ImGui::GetIO();
 	io.DisplaySize = { (float)w, (float)h };
 	io.DeltaTime = dt;
 	ImGui::NewFrame();
 
-	// ImGui UI Code 
-	ImGui::ShowDemoWindow();
-	if (ImGui::Begin("Cat")) { ImGui::Text("Dog"); } ImGui::End();
-	if (ImGui::Begin("Dog")) { ImGui::Text("Cat"); } ImGui::End();
+	// Make us a nice camera
+	VMatrix viewMatrix;
+	VMatrix projMatrix;
+	Camera_t m_cam = { {0, 0, 0}, {0, 0, 0}, 65, 1.0f, 20000.0f };
+	ComputeViewMatrix(&viewMatrix, m_cam);
+	ComputeProjectionMatrix(&projMatrix, m_cam, w, h);
 
-	// End ImGui
+	// 3D Rendering mode
+	ctx->MatrixMode(MATERIAL_PROJECTION);
+	ctx->LoadMatrix(projMatrix);
+	ctx->MatrixMode(MATERIAL_VIEW);
+	ctx->LoadMatrix(viewMatrix);
+
+	// Draw our model
+	static studiomodel_t model = studiomodel_t::LoadModel(s_modelName);
+	static QAngle ang = { 0,0,0 };
+	static Vector pos = { 80,0,0 };
+	model.Draw(pos, ang);
+
+	// Mouse input
+	// If we're dragging a window, we don't want to be dragging our model too
+	if (!io.WantCaptureMouse)
+	{
+		static double ox = 0, oy = 0, x = 0, y = 0;
+		if (glfwGetMouseButton(m_pWindow, GLFW_MOUSE_BUTTON_1))
+		{
+			glfwGetCursorPos(m_pWindow, &x, &y);
+			ang.y += x - ox;
+			ang.x -= y - oy;
+			ox = x;
+			oy = y;
+		}
+		else
+		{
+			glfwGetCursorPos(m_pWindow, &ox, &oy);
+		}
+	}
+
+	// Model Properties
+	if (ImGui::Begin("Model"))
+	{
+		ImGui::InputText("Path", s_modelName, sizeof(s_modelName));
+		ImGui::SameLine();
+		if (ImGui::Button("Apply"))
+			model = studiomodel_t::LoadModel(s_modelName);
+		
+		ImGui::InputFloat3("pos", pos.Base());
+		ImGui::SliderFloat3("ang", ang.Base(), -360, 360);
+	}
+	ImGui::End();
+
+	// End ImGui, and let it draw
 	ImGui::Render();
 	ImGui_ImplSource_RenderDrawData(ImGui::GetDrawData());
 

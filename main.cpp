@@ -2,6 +2,10 @@
 #include "tier0/icommandline.h"
 #include "appframework/appframework.h"
 #include "materialsystem/imaterialsystem.h"
+#include "istudiorender.h"
+#include "vphysics_interface.h"
+#include "Datacache/imdlcache.h"
+#include "datacache/idatacache.h"
 #include "filesystem_init.h"
 #include "tier1/tier1.h"
 #include "tier2/tier2.h"
@@ -9,6 +13,8 @@
 #include "memdbgoff.h"
 
 IFileSystem* g_pFileSystem;
+IStudioRender* g_pStudioRender;
+IMDLCache* g_pMDLCache;
 
 class CSteamAppLoader : public CSteamAppSystemGroup
 {
@@ -86,6 +92,10 @@ bool CSteamAppLoader::Create()
 	AppSystemInfo_t appSystems[] =
 	{
 		{ "materialsystem.dll",		MATERIAL_SYSTEM_INTERFACE_VERSION },
+		{ "studiorender.dll",		STUDIO_RENDER_INTERFACE_VERSION   },
+		{ "vphysics.dll",			VPHYSICS_INTERFACE_VERSION }, // Annoyingly, we need vphyiscs as well :P
+		{ "datacache.dll",			DATACACHE_INTERFACE_VERSION },
+		{ "datacache.dll",			MDLCACHE_INTERFACE_VERSION },
 		{ "", "" }	// Required to terminate the list
 	};
 
@@ -96,10 +106,12 @@ bool CSteamAppLoader::Create()
 	ConnectTier1Libraries(&factory, 1);
 	ConnectTier2Libraries(&factory, 1);
 
-	g_pFileSystem = (IFileSystem*)FindSystem(FILESYSTEM_INTERFACE_VERSION);
-	g_pMaterialSystem = (IMaterialSystem*)FindSystem(MATERIAL_SYSTEM_INTERFACE_VERSION);
+	g_pFileSystem      = (IFileSystem*)FindSystem(FILESYSTEM_INTERFACE_VERSION);
+	g_pMaterialSystem  = (IMaterialSystem*)FindSystem(MATERIAL_SYSTEM_INTERFACE_VERSION);
+	g_pStudioRender	   = (IStudioRender*)FindSystem(STUDIO_RENDER_INTERFACE_VERSION);
+	g_pMDLCache		   = (IMDLCache*)FindSystem(MDLCACHE_INTERFACE_VERSION);
 
-	if (!g_pFileSystem || !g_pMaterialSystem)
+	if (!g_pFileSystem || !g_pMaterialSystem || !g_pStudioRender || !g_pMDLCache)
 	{
 		Error("Unable to load required library interface!\n");
 		return false;
@@ -137,4 +149,35 @@ int CSteamAppLoader::Main()
 	g_pMaterialSystem->ModShutdown();
 
 	return 0;
+}
+
+
+// Would just include studio_generic_io, but I'm not sure what nonsense is happening in there...
+
+// This function would be useful, if it was static...
+const studiohdr_t* studiohdr_t::FindModel(void** cache, char const* modelname) const
+{
+	MDLHandle_t handle = g_pMDLCache->FindMDL(modelname);
+	*cache = (void*)handle;
+	return g_pMDLCache->GetStudioHdr(handle);
+}
+
+virtualmodel_t* studiohdr_t::GetVirtualModel() const
+{
+	return g_pMDLCache->GetVirtualModel((MDLHandle_t)virtualModel);
+}
+
+byte* studiohdr_t::GetAnimBlock(int i) const
+{
+	return g_pMDLCache->GetAnimBlock((MDLHandle_t)virtualModel, i);
+}
+
+int studiohdr_t::GetAutoplayList(unsigned short** pOut) const
+{
+	return g_pMDLCache->GetAutoplayList((MDLHandle_t)virtualModel, pOut);
+}
+
+const studiohdr_t* virtualgroup_t::GetStudioHdr() const
+{
+	return g_pMDLCache->GetStudioHdr((MDLHandle_t)cache);
 }

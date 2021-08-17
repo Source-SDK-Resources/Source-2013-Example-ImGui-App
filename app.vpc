@@ -52,6 +52,7 @@ $Project "Example ImGui Source App"
 			$File "..\public\filesystem_helpers.cpp"
 			$File "..\public\filesystem_init.cpp"
 			$File "..\public\tier0\memoverride.cpp"
+			$File "..\public\studio.cpp"
 		}
 		$File "imgui_impl_source.cpp"
 		$File "imgui_impl_source.h"
