@@ -151,33 +151,3 @@ int CSteamAppLoader::Main()
 	return 0;
 }
 
-
-// Would just include studio_generic_io, but I'm not sure what nonsense is happening in there...
-
-// This function would be useful, if it was static...
-const studiohdr_t* studiohdr_t::FindModel(void** cache, char const* modelname) const
-{
-	MDLHandle_t handle = g_pMDLCache->FindMDL(modelname);
-	*cache = (void*)handle;
-	return g_pMDLCache->GetStudioHdr(handle);
-}
-
-virtualmodel_t* studiohdr_t::GetVirtualModel() const
-{
-	return g_pMDLCache->GetVirtualModel((MDLHandle_t)virtualModel);
-}
-
-byte* studiohdr_t::GetAnimBlock(int i) const
-{
-	return g_pMDLCache->GetAnimBlock((MDLHandle_t)virtualModel, i);
-}
-
-int studiohdr_t::GetAutoplayList(unsigned short** pOut) const
-{
-	return g_pMDLCache->GetAutoplayList((MDLHandle_t)virtualModel, pOut);
-}
-
-const studiohdr_t* virtualgroup_t::GetStudioHdr() const
-{
-	return g_pMDLCache->GetStudioHdr((MDLHandle_t)cache);
-}

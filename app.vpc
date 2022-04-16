@@ -7,6 +7,8 @@
 $Macro SRCDIR		".."
 $Macro OUTBINDIR	"$SRCDIR\..\game\bin"
 $Macro OUTBINNAME	"exampleapp"
+$Macro PUBLIC		"$SRCDIR\public"
+
 
 $Include "$SRCDIR\vpc_scripts\source_exe_con_base.vpc"
 
@@ -14,7 +16,7 @@ $Configuration
 {
 	$Compiler
 	{
-		$AdditionalIncludeDirectories	"$BASE;./;../public/mathlib;../public/;./thirdparty;./thirdparty/glfw/include"
+		$AdditionalIncludeDirectories	"$BASE;./;../public/mathlib;../public/;./thirdparty;./thirdparty/glfw/include;./thirdparty/imgui"
 		$TreatWarningsAsErrors			"No (/WX-)"
 		$PreprocessorDefinitions		"$BASE;"
 	}
@@ -38,28 +40,38 @@ $Project "Example ImGui Source App"
 		$File "thirdparty\imgui\imstb_rectpack.h"
 		$File "thirdparty\imgui\imstb_textedit.h"
 		$File "thirdparty\imgui\imstb_truetype.h"
+		$File "thirdparty\imgui\backends\imgui_impl_glfw.h"
 		
 		$File "thirdparty\imgui\imgui.cpp"
 		$File "thirdparty\imgui\imgui_demo.cpp"
 		$File "thirdparty\imgui\imgui_draw.cpp"
 		$File "thirdparty\imgui\imgui_tables.cpp"
 		$File "thirdparty\imgui\imgui_widgets.cpp"
+		$File "thirdparty\imgui\backends\imgui_impl_glfw.cpp"
+
 	}
 	$Folder	"Source Files"
 	{
-		$Folder "External"
+		$Folder "Public"
 		{
-			$File "..\public\filesystem_helpers.cpp"
-			$File "..\public\filesystem_init.cpp"
-			$File "..\public\tier0\memoverride.cpp"
-			$File "..\public\studio.cpp"
+			$File "$PUBLIC\filesystem_helpers.cpp"
+			$File "$PUBLIC\filesystem_init.cpp"
+			$File "$PUBLIC\tier0\memoverride.cpp"
+			$File "$PUBLIC\studio.cpp"
+			$File "$PUBLIC\bone_setup.cpp"
+			$File "$PUBLIC\CollisionUtils.cpp"
 		}
-		$File "imgui_impl_source.cpp"
 		$File "imgui_impl_source.h"
+		$File "imgui_impl_source.cpp"
 
 		$File "main.cpp"
-		$File "app.cpp"
+
 		$File "app.h"
+		$File "app.cpp"
+
+		$File "studiomodel.h"
+		$File "studiomodel.cpp"
+
 	}
 	
 	$Folder	"Libraries"

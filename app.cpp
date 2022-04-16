@@ -5,10 +5,13 @@
 #include "istudiorender.h"
 #include "tier2/camerautils.h"
 
+#include "studiomodel.h"
+
 // Bring in our non-source things
 #include "memdbgoff.h"
 
 #include <imgui_impl_source.h>
+#include <imgui/backends/imgui_impl_glfw.h>
 #include <imgui/imgui.h>
 
 #ifdef _WIN32
@@ -16,50 +19,6 @@
 #endif
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
-
-// Small struct to hold studiomdl info and render for us 
-class IMDLCache;
-extern IMDLCache* g_pMDLCache;
-struct studiomodel_t
-{
-	static studiomodel_t LoadModel(const char* path)
-	{
-		MDLHandle_t mdlHandle = g_pMDLCache->FindMDL(path);
-
-		CStudioHdr* studiohdr = new CStudioHdr(g_pMDLCache->GetStudioHdr(mdlHandle), g_pMDLCache);
-		studiohwdata_t* studiohwdata = g_pMDLCache->GetHardwareData(mdlHandle);
-		if (studiohdr->GetRenderHdr()->version != STUDIO_VERSION)
-		{
-			Error("Bad model version on %s! Expected %d, got %d!\n", path, STUDIO_VERSION, studiohdr->GetRenderHdr()->version);
-			return { 0, 0 };
-		}
-		return { studiohdr, studiohwdata };
-	}
-
-	void Draw(Vector& pos, QAngle& ang)
-	{
-		if (!studiohdr || !studiohwdata)
-			return;
-
-		// Set the info
-		DrawModelInfo_t info;
-		memset(&info, 0, sizeof(info));
-		info.m_pStudioHdr = const_cast<studiohdr_t*>(studiohdr->GetRenderHdr());
-		info.m_pHardwareData = studiohwdata;
-		info.m_Lod = -1;
-
-		// Set the transform
-		matrix3x4_t matrix;
-		AngleMatrix(ang, matrix);
-		MatrixSetColumn(pos, 3, matrix);
-
-		// Draw it
-		g_pStudioRender->DrawModelStaticProp(info, matrix);
-	}
-
-	CStudioHdr* studiohdr;
-	studiohwdata_t* studiohwdata;
-};
 
 
 // Currently blank, but might be worth filling in if you need mat proxies
@@ -71,48 +30,6 @@ public:
 };
 CDummyMaterialProxyFactory g_DummyMaterialProxyFactory;
 
-// glfw and imgui callbacks
-static const char* getClipboardText(void* user_data)
-{
-	return glfwGetClipboardString((GLFWwindow*)user_data);
-}
-static void setClipboardText(void* user_data, const char* text)
-{
-	glfwSetClipboardString((GLFWwindow*)user_data, text);
-}
-static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-	ImGuiIO& io = ImGui::GetIO();
-	if (key >= 0 && key < IM_ARRAYSIZE(io.KeysDown))
-		io.KeysDown[key] = action != GLFW_RELEASE;
-
-	io.KeyCtrl = io.KeysDown[GLFW_KEY_LEFT_CONTROL] || io.KeysDown[GLFW_KEY_RIGHT_CONTROL];
-	io.KeyShift = io.KeysDown[GLFW_KEY_LEFT_SHIFT] || io.KeysDown[GLFW_KEY_RIGHT_SHIFT];
-	io.KeyAlt = io.KeysDown[GLFW_KEY_LEFT_ALT] || io.KeysDown[GLFW_KEY_RIGHT_ALT];
-	io.KeySuper = io.KeysDown[GLFW_KEY_LEFT_SUPER] || io.KeysDown[GLFW_KEY_RIGHT_SUPER];
-}
-static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
-{
-	ImGuiIO& io = ImGui::GetIO();
-	if (button >= 0 && button < IM_ARRAYSIZE(io.MouseDown))
-		io.MouseDown[button] = action != GLFW_RELEASE;
-}
-static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos)
-{
-	ImGuiIO& io = ImGui::GetIO();
-	io.MousePos = ImVec2((float)xpos, (float)ypos);
-}
-static void charCallback(GLFWwindow* window, unsigned int c)
-{
-	ImGuiIO& io = ImGui::GetIO();
-	io.AddInputCharacter(c);
-}
-static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
-{
-	ImGuiIO& io = ImGui::GetIO();
-	io.MouseWheelH += (float)xoffset;
-	io.MouseWheel += (float)yoffset;
-}
 
 
 
@@ -163,60 +80,25 @@ void CImGuiSourceApp::Init()
 	ImGui::CreateContext();
 	ImGui_ImplSource_Init();
 	ImGui::StyleColorsDark();
+	ImGui_ImplGlfw_InitForOther(m_pWindow, true);
+//	ImGui_ImplSourceGLFW_Init(m_pWindow, (void*)hwnd);
 
-	// Wire up Dear ImGui into glfw
-	ImGuiIO& io = ImGui::GetIO();
-	
-	// Looks crazy, I know, but ImGui only wants these. It takes in the rest of the keys as "char inputs"
-	io.KeyMap[ImGuiKey_Tab] = GLFW_KEY_TAB;
-	io.KeyMap[ImGuiKey_LeftArrow] = GLFW_KEY_LEFT;
-	io.KeyMap[ImGuiKey_RightArrow] = GLFW_KEY_RIGHT;
-	io.KeyMap[ImGuiKey_UpArrow] = GLFW_KEY_UP;
-	io.KeyMap[ImGuiKey_DownArrow] = GLFW_KEY_DOWN;
-	io.KeyMap[ImGuiKey_PageUp] = GLFW_KEY_PAGE_UP;
-	io.KeyMap[ImGuiKey_PageDown] = GLFW_KEY_PAGE_DOWN;
-	io.KeyMap[ImGuiKey_Home] = GLFW_KEY_HOME;
-	io.KeyMap[ImGuiKey_End] = GLFW_KEY_END;
-	io.KeyMap[ImGuiKey_Insert] = GLFW_KEY_INSERT;
-	io.KeyMap[ImGuiKey_Delete] = GLFW_KEY_DELETE;
-	io.KeyMap[ImGuiKey_Backspace] = GLFW_KEY_BACKSPACE;
-	io.KeyMap[ImGuiKey_Space] = GLFW_KEY_SPACE;
-	io.KeyMap[ImGuiKey_Enter] = GLFW_KEY_ENTER;
-	io.KeyMap[ImGuiKey_Escape] = GLFW_KEY_ESCAPE;
-	io.KeyMap[ImGuiKey_KeyPadEnter] = GLFW_KEY_KP_ENTER;
-	io.KeyMap[ImGuiKey_A] = GLFW_KEY_A;
-	io.KeyMap[ImGuiKey_C] = GLFW_KEY_C;
-	io.KeyMap[ImGuiKey_V] = GLFW_KEY_V;
-	io.KeyMap[ImGuiKey_X] = GLFW_KEY_X;
-	io.KeyMap[ImGuiKey_Y] = GLFW_KEY_Y;
-	io.KeyMap[ImGuiKey_Z] = GLFW_KEY_Z;
-
-	io.SetClipboardTextFn = setClipboardText;
-	io.GetClipboardTextFn = getClipboardText;
-	io.ClipboardUserData = m_pWindow;
-#if defined(_WIN32)
-	io.ImeWindowHandle = (void*)hwnd;
-#endif
-
-	// Setup all our glfw callbacks
-	glfwSetKeyCallback(        m_pWindow, keyCallback);
-	glfwSetMouseButtonCallback(m_pWindow, mouseButtonCallback);
-	glfwSetCursorPosCallback(  m_pWindow, cursorPosCallback);
-	glfwSetCharCallback(       m_pWindow, charCallback);
-	glfwSetScrollCallback(     m_pWindow, scrollCallback);
-	
 	m_lastFrameTime = glfwGetTime();
 
 	// Main app loop
 	while (!glfwWindowShouldClose(m_pWindow))
 	{
 		glfwPollEvents();
+		ImGui_ImplGlfw_NewFrame();
 		DrawFrame();
 	}
 }
 
 void CImGuiSourceApp::Destroy()
 {
+	ImGui_ImplSource_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+
 	// Clean up all of our assets, windows, etc
 	if(m_ambientLightColors)
 		delete[] m_ambientLightColors;
@@ -230,7 +112,7 @@ void CImGuiSourceApp::Destroy()
 }
 
 // Current model in use
-static char s_modelName[256] = "models/props_wasteland/laundry_cart002.mdl";
+static char s_modelName[256] = "models/barney.mdl";
 
 void CImGuiSourceApp::DrawFrame()
 {
@@ -255,8 +137,6 @@ void CImGuiSourceApp::DrawFrame()
 	// Begin ImGui
 	// Ideally this happens before we branch off into other functions, as it needs to be setup for other sections of code to use imgui
 	ImGuiIO& io = ImGui::GetIO();
-	io.DisplaySize = { (float)w, (float)h };
-	io.DeltaTime = dt;
 	ImGui::NewFrame();
 
 	// Make us a nice camera
@@ -273,10 +153,12 @@ void CImGuiSourceApp::DrawFrame()
 	ctx->LoadMatrix(viewMatrix);
 
 	// Draw our model
-	static studiomodel_t model = studiomodel_t::LoadModel(s_modelName);
-	static QAngle ang = { 0,0,0 };
-	static Vector pos = { 80,0,0 };
-	model.Draw(pos, ang);
+	static CStudioModel* model = new CStudioModel(s_modelName);
+	static QAngle ang = { 0,-90,0 };
+	static Vector pos = {120,0,-40};
+	model->m_time = curTime;
+	model->sequence = 40;
+	model->Draw(pos, ang);
 
 	// Mouse input
 	// If we're dragging a window, we don't want to be dragging our model too
@@ -303,12 +185,17 @@ void CImGuiSourceApp::DrawFrame()
 		ImGui::InputText("Path", s_modelName, sizeof(s_modelName));
 		ImGui::SameLine();
 		if (ImGui::Button("Apply"))
-			model = studiomodel_t::LoadModel(s_modelName);
+		{
+			delete model;
+			model = new CStudioModel(s_modelName);
+		}
 		
 		ImGui::InputFloat3("pos", pos.Base());
 		ImGui::SliderFloat3("ang", ang.Base(), -360, 360);
 	}
 	ImGui::End();
+
+	ImGui::ShowDemoWindow();
 
 	// End ImGui, and let it draw
 	ImGui::Render();
