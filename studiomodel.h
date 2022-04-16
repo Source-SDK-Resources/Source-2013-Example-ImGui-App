@@ -12,9 +12,9 @@ struct CStudioModel
 
 	Vector Center();
 
-	CStudioHdr* studiohdr;
-	studiohwdata_t* studiohwdata;
-	int sequence;
+	CStudioHdr* m_studiohdr;
+	studiohwdata_t* m_studiohwdata;
+	int m_sequence;
 	Vector* m_posepos;
 	Quaternion* m_poseang;
 	float* m_poseparameter;

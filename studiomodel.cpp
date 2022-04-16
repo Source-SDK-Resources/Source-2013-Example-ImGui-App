@@ -23,11 +23,11 @@ CStudioModel::CStudioModel(const char* path)
 		return;
 	}
 
-	this->studiohdr = studiohdr;
-	this->studiohwdata = studiohwdata;
-	this->sequence = 0;
-	this->m_posepos = new Vector[studiohdr->numbones()];
-	this->m_poseang = new Quaternion[studiohdr->numbones()];
+	m_studiohdr = studiohdr;
+	m_studiohwdata = studiohwdata;
+	m_sequence = 0;
+	m_posepos = new Vector[studiohdr->numbones()];
+	m_poseang = new Quaternion[studiohdr->numbones()];
 	m_poseparameter = new float[studiohdr->GetNumPoseParameters()];
 	m_poseparameterProcessed = new float[studiohdr->GetNumPoseParameters()];
 
@@ -74,44 +74,44 @@ void CStudioModel::Draw(Vector& pos, QAngle& ang)
 
 void CStudioModel::Draw(matrix3x4_t& rootmatrix)
 {
-	if (!studiohdr || !studiohwdata)
+	if (!m_studiohdr || !m_studiohwdata)
 		return;
 
 	// Set the info
 	DrawModelInfo_t info;
 	memset(&info, 0, sizeof(info));
-	info.m_pStudioHdr = const_cast<studiohdr_t*>(studiohdr->GetRenderHdr());
-	info.m_pHardwareData = studiohwdata;
+	info.m_pStudioHdr = const_cast<studiohdr_t*>(m_studiohdr->GetRenderHdr());
+	info.m_pHardwareData = m_studiohwdata;
 	info.m_Lod = -1;
 
 
 	// Draw it
-	if (studiohdr->flags() & STUDIOHDR_FLAGS_STATIC_PROP)
+	if (m_studiohdr->flags() & STUDIOHDR_FLAGS_STATIC_PROP)
 		g_pStudioRender->DrawModelStaticProp(info, rootmatrix);
 	else
 	{
 		memset(s_flexdescweight, 0, sizeof(s_flexdescweight));
 		memset(s_flexdescweight2, 0, sizeof(s_flexdescweight2));
 
-		int flexcount = studiohdr->numflexdesc();
+		int flexcount = m_studiohdr->numflexdesc();
 
-		for (int i = 0; i < studiohdr->GetNumPoseParameters(); i++)
+		for (int i = 0; i < m_studiohdr->GetNumPoseParameters(); i++)
 		{
-			m_poseparameter[i] = Studio_SetPoseParameter(studiohdr, i, m_poseparameter[i], m_poseparameterProcessed[i]);
+			m_poseparameter[i] = Studio_SetPoseParameter(m_studiohdr, i, m_poseparameter[i], m_poseparameterProcessed[i]);
 		}
 
-		IBoneSetup boneSetup(studiohdr, BONE_USED_BY_ANYTHING, m_poseparameterProcessed);
+		IBoneSetup boneSetup(m_studiohdr, BONE_USED_BY_ANYTHING, m_poseparameterProcessed);
 		boneSetup.InitPose(m_posepos, m_poseang);
 
 
-		float cycleRate = Studio_CPS(studiohdr, studiohdr->pSeqdesc(sequence), sequence, m_poseparameter);
-		boneSetup.AccumulatePose(m_posepos, m_poseang, sequence, fmod(m_time * cycleRate, 1.0), 1.0, m_time, 0);
+		float cycleRate = Studio_CPS(m_studiohdr, m_studiohdr->pSeqdesc(m_sequence), m_sequence, m_poseparameter);
+		boneSetup.AccumulatePose(m_posepos, m_poseang, m_sequence, fmod(m_time * cycleRate, 1.0), 1.0, m_time, 0);
 
 		matrix3x4_t* g_pBoneToWorld = g_pStudioRender->LockBoneMatrices(MAXSTUDIOBONES);
 
-		for (int i = 0; i < studiohdr->numbones(); i++)
+		for (int i = 0; i < m_studiohdr->numbones(); i++)
 		{
-			if (CalcProceduralBone(studiohdr, i, CBoneAccessor(g_pBoneToWorld)))
+			if (CalcProceduralBone(m_studiohdr, i, CBoneAccessor(g_pBoneToWorld)))
 				continue;
 
 			// Set the transform
@@ -119,7 +119,7 @@ void CStudioModel::Draw(matrix3x4_t& rootmatrix)
 			QuaternionMatrix(m_poseang[i], matrix);
 			MatrixSetColumn(m_posepos[i], 3, matrix);
 
-			mstudiobone_t* pBone = studiohdr->pBone(i);
+			mstudiobone_t* pBone = m_studiohdr->pBone(i);
 			if (pBone->parent == -1)
 				ConcatTransforms(rootmatrix, matrix, g_pBoneToWorld[i]);
 			else
@@ -131,27 +131,27 @@ void CStudioModel::Draw(matrix3x4_t& rootmatrix)
 			s_flexdescweight[i] = 0.0;
 		}
 
-		for (LocalFlexController_t i = (LocalFlexController_t)0; i < studiohdr->numflexcontrollers(); i++)
+		for (LocalFlexController_t i = (LocalFlexController_t)0; i < m_studiohdr->numflexcontrollers(); i++)
 		{
-			studiohdr->pFlexcontroller(i)->localToGlobal = i;
+			m_studiohdr->pFlexcontroller(i)->localToGlobal = i;
 		}
 
-		for (LocalFlexController_t i = (LocalFlexController_t)0; i < studiohdr->numflexcontrollers(); i++)
+		for (LocalFlexController_t i = (LocalFlexController_t)0; i < m_studiohdr->numflexcontrollers(); i++)
 		{
-			mstudioflexcontroller_t* pflex = studiohdr->pFlexcontroller(i);
-			int j = studiohdr->pFlexcontroller(i)->localToGlobal;
+			mstudioflexcontroller_t* pflex = m_studiohdr->pFlexcontroller(i);
+			int j = m_studiohdr->pFlexcontroller(i)->localToGlobal;
 			// remap m_flexweights to full dynamic range, global flexcontroller indexes
 			s_flexweightsrc[j] = 0.5f * (pflex->max - pflex->min) + pflex->min;
 		}
 
-		studiohdr->RunFlexRules(s_flexweightsrc, s_flexdescweight);
+		m_studiohdr->RunFlexRules(s_flexweightsrc, s_flexdescweight);
 
 
 		// Apparently, we have to hand these over to be allocated and then copy into them now.
 		float* pFlexdescweight;
 		float* pFlexdescweight2;
 		g_pStudioRender->LockFlexWeights(flexcount, &pFlexdescweight, &pFlexdescweight2);
-		for (int i = 0; i < studiohdr->numflexdesc(); i++)
+		for (int i = 0; i < m_studiohdr->numflexdesc(); i++)
 		{
 			s_flexdescweight2[i] = s_flexdescweight2[i] * 0/*weight ratio*/ + s_flexdescweight[i] * (1 - 0/*weight ratio*/);
 			pFlexdescweight[i] = s_flexdescweight[i];
@@ -166,7 +166,7 @@ void CStudioModel::Draw(matrix3x4_t& rootmatrix)
 
 Vector CStudioModel::Center()
 {
-	return (studiohdr->hull_max() + studiohdr->hull_min()) * 0.5f;
+	return (m_studiohdr->hull_max() + m_studiohdr->hull_min()) * 0.5f;
 }
 
 

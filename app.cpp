@@ -142,9 +142,10 @@ void CImGuiSourceApp::DrawFrame()
 	// Make us a nice camera
 	VMatrix viewMatrix;
 	VMatrix projMatrix;
-	Camera_t m_cam = { {0, 0, 0}, {0, 0, 0}, 65, 1.0f, 20000.0f };
-	ComputeViewMatrix(&viewMatrix, m_cam);
-	ComputeProjectionMatrix(&projMatrix, m_cam, w, h);
+	static float zoom = 120.0;
+	static Camera_t cam = { {-zoom, 0, 0}, {0, 0, 0}, 65, 1.0f, 20000.0f };
+	ComputeViewMatrix(&viewMatrix, cam);
+	ComputeProjectionMatrix(&projMatrix, cam, w, h);
 
 	// 3D Rendering mode
 	ctx->MatrixMode(MATERIAL_PROJECTION);
@@ -154,29 +155,41 @@ void CImGuiSourceApp::DrawFrame()
 
 	// Draw our model
 	static CStudioModel* model = new CStudioModel(s_modelName);
-	static QAngle ang = { 0,-90,0 };
-	static Vector pos = {120,0,-40};
+	static QAngle ang = { 0, 0,0 };
+	static Vector pos = -model->Center();
 	model->m_time = curTime;
-	model->sequence = 40;
+	model->m_sequence = 40;
 	model->Draw(pos, ang);
 
 	// Mouse input
 	// If we're dragging a window, we don't want to be dragging our model too
 	if (!io.WantCaptureMouse)
 	{
-		static double ox = 0, oy = 0, x = 0, y = 0;
-		if (glfwGetMouseButton(m_pWindow, GLFW_MOUSE_BUTTON_1))
+		// Slow down our zoom as we get closer in for finer movements
+		float mw = io.MouseWheel;
+		mw *= zoom / 20.0f;
+		
+		// Don't allow zooming into and past our model
+		zoom += mw;
+		if (zoom <= 1)
+			zoom = 1;
+
+		// Camera rotation
+		float x = io.MousePos.x;
+		float y = io.MousePos.y;
+		static float ox = 0, oy = 0;
+		if (io.MouseDown[0])
 		{
-			glfwGetCursorPos(m_pWindow, &x, &y);
-			ang.y += x - ox;
-			ang.x -= y - oy;
-			ox = x;
-			oy = y;
+			cam.m_angles.y -= x - ox;
+			cam.m_angles.x += y - oy;
 		}
-		else
-		{
-			glfwGetCursorPos(m_pWindow, &ox, &oy);
-		}
+		ox = x;
+		oy = y;
+
+		// Set the camera to its new position
+		Vector forward;
+		AngleVectors(cam.m_angles, &forward);
+		cam.m_origin = forward * -zoom;
 	}
 
 	// Model Properties
